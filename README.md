@@ -17,7 +17,8 @@
 #### 实时回显运行shell命令: **echo_run_shell.py**
 #### 获取两个日期之间的每天日期: **getEveryDay.py**
 #### 使用函数名动态调用函数: **how_str_call_func.py**
-#### ip地址查询: **ip_info.py**  
+#### ip地址查询: **ip_info.py** 
+#### PyQt实例程序 **PyQt_demo.py**  
 #### 发送邮件: **send_email.py**
 #### Python 创作者,Tim Peters的一些编程思想: **TimPeters-thinking.py**
 #### 正则匹配中文字符: **zh_re.py**  
