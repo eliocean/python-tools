@@ -10,6 +10,10 @@
 #### py3读取office文件: **py-read-office/**
 #### py生成验证码: **py-verification-code/**
 #### 反向shell: **Reverse-Shell/**  
+#### windows下截屏: **capture/**  
+#### windows下截屏且使用paddleOCR: **capture_ocr/**  
+#### windows下切换活动窗口: **change_active_window/**  
+#### paddleOCR文字识别: **paddleocr-demo/**  
 #### 时间日期相关操作: **about_datetime.py**
 #### mongodb导出到csv文件: **big_export_mongodb_csv.py**
 #### 计算大文件行数: **bigfile_count_line.py**
@@ -22,5 +26,5 @@
 #### 发送邮件: **send_email.py**
 #### Python 创作者,Tim Peters的一些编程思想: **TimPeters-thinking.py**
 #### 替换一段代码中的中文标点符号: **trans__ZH_punctuation.py**  
-#### 正则匹配中文字符: **zh_re.py**  
+#### 正则匹配中文字符: **zh_re.py**
 
