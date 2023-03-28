@@ -27,4 +27,6 @@
 #### Python 创作者,Tim Peters的一些编程思想: **TimPeters-thinking.py**
 #### 替换一段代码中的中文标点符号: **trans__ZH_punctuation.py**  
 #### 正则匹配中文字符: **zh_re.py**
+#### 获取文件绝对路径: **[abspath.py](abspath.py)**
+
 
