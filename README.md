@@ -16,6 +16,7 @@
 #### paddleOCR文字识别: **paddleocr-demo/**  
 #### 时间日期相关操作: **about_datetime.py**
 #### mongodb导出到csv文件: **big_export_mongodb_csv.py**
+#### json数据N层解析，数据拉平: **mongo_normalize_export.py**
 #### 计算大文件行数: **bigfile_count_line.py**
 #### cpu负载监控脚本: **cpu_monitor.py**
 #### 实时回显运行shell命令: **echo_run_shell.py**
