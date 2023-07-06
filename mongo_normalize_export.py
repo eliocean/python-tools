@@ -1,13 +1,4 @@
 #!/home/appadmin/python361/bin/python3
-"""
-# 展平json数据，输出文件
-./mongo_normalize_export.py --collection='jobs' --filepath='/data/dt/' \
---conn=ABC --limit=500 \
---columns='{"jobs":["_id", "_class", "col1", "col2"]}'
-"""
-
-
-
 import ast
 import datetime
 import json
@@ -23,26 +14,36 @@ import os
 import argparse
 
 """
+展平json数据，输出文件
+"""
+
+"""
 注意，MongoReader的query条件转化为可支持 mongoexport 格式的$date数据类型
 qstr = '{"predict_time":{"$gte" :{ "$date": "2019-09-25T00:00:00.000Z" } ,"$lte": { "$date": "2019-09-28T00:00:00.000Z" }}}'
+"""
+
+"""
+20230705修改：使list表字段不需要在最外层表中指出，且没有dellist 选项
+最终生成的表，分别有哪些字段，直接由columns_dict 确定。
 """
 
 
 class MongoReader():
     """
-    按查询条件分批次读取mongodb数据
+    使用pymongo库，按查询条件以迭代器方式读取mongodb数据，columns 直接取全部
     """
 
     def __init__(self, conn, collectionName: str, **kwargs):
         """
-        :param conn: str | dict
-        :param collectionName:
+        :param conn: str | dict of mongoClient command
+        :param collectionName:the str of mongodb collection name
         :param kwargs:
         """
         self.read_config = {}
         self.read_config['mechanism'] = 'SCRAM-SHA-1'  # 身份验证方式 [默认SCRAM-SHA-1]
         self.read_config['query'] = self.__fmt_query(kwargs.get('query', {}))  # 数据查询条件 [默认全部]
         self.read_config['batch'] = kwargs.get('batch', 30000)  # 分批次读取数据，一次处理的数据量 [默认3W]
+        self.read_config['collection'] = collectionName  # 表名/集合名词
         self.read_config['limit'] = kwargs.get('limit', None)  # int 数据量解析限制，只处理limit条数据 [默认无限制]
         self.read_config['columns'] = kwargs.get('columns', None)  # mongo导出数据字段 [默认全部]
         self.read_config.update(kwargs)
@@ -57,7 +58,6 @@ class MongoReader():
                                   mechanism=self.read_config.get('mechanism'))
             self.read_config['cliect'] = cliect  # MongoClient
             self.read_config['database'] = database  # DatabaseName
-            self.read_config['collection'] = collectionName  # CollectionName
         except Exception as e:
             print("Mongodb数据库连接失败，错误信息:\n", e)
 
@@ -83,7 +83,7 @@ class MongoReader():
 
     def __fmt_query(self, x):
         """
-        json 字符串中的函数解析为python 对象
+        json 字符串中的函数解析为 python 对象
         qstr = '{"predict_time":{"$gte" :{ "$date": "2019-09-25T00:00:00.000Z" } ,"$lte": { "$date": "2019-09-28T00:00:00.000Z" }}}'
         :param x: json_dict
         :return:json_dict ,函数字符串转换对象
@@ -150,10 +150,11 @@ class MongoExporter():
     按查询条件分批次导出mongodb数据到文件
     """
 
-    def __init__(self, conn, collectionName: str, filename: str, **kwargs):
+    def __init__(self, conn, collectionName: str, exp_filename: str, **kwargs):
         """
-        :param conn: str | dict
-        :param collectionName:
+        :param conn: str | dict of mongoClient command
+        :param collectionName:the str of mongodb collection name
+        :param tmp_exp_filename: 临时导出文件的文件名
         :param kwargs:
         """
         self.exp_config = {}
@@ -161,12 +162,21 @@ class MongoExporter():
         self.exp_config['query'] = kwargs.get('query', {})  # 数据查询条件 [默认全部]
         self.exp_config['limit'] = kwargs.get('limit', None)  # int 数据量解析限制，只处理limit条数据 [默认无限制]
         self.exp_config['collection'] = collectionName  # 表名/集合名词
-        self.exp_config['filename'] = filename  # 文件路径
+        self.exp_config['batch'] = kwargs.get('batch', 30000)  # 分批次读取数据，一次处理的数据量 [默认3W]
+        self.exp_config['exp_filename'] = exp_filename  # 临时文件名
         self.exp_config['columns'] = kwargs.get('columns', None)  # 导出字段
         self.exp_config.update(kwargs)
         # 接下来连接db
         conndict = self.__fmt_conn(conn)
         self.exp_config['conn'] = conndict  # 连接配置信息，账号密码等
+
+    @staticmethod
+    def is_file_null(filename):
+        """判断文件是否为空"""
+        if os.path.getsize(filename) == 0:
+            return True
+        else:
+            return False
 
     def __fmt_conn(self, conn):
         if isinstance(conn, str):
@@ -191,19 +201,15 @@ class MongoExporter():
         cmd.communicate()
         return cmd.returncode
 
-    def export_json(self):
+    def export_data(self):
+        tmp_exp_filename_list = []
         query_dict = self.exp_config.get('query', {})
         limit = self.exp_config.get('limit', None)
+        batchSize = self.exp_config.get('batch', None)
         collectionName = self.exp_config.get('collection')
         conndict = self.exp_config.get('conn', None)
         columns = self.exp_config.get('columns', None)
-        # MongoReader的__fmt_query 改变了 query_dict，所以必须使用深拷贝
-        tmpMongoReader = MongoReader(conn=conndict, collectionName=collectionName, query=deepcopy(query_dict))
-        maxLineNum = tmpMongoReader.get_cnt()
-
-        filename = self.exp_config.get('filename', collectionName)
-        if os.path.exists(filename):
-            os.remove(filename)  # 删除文件，以便输入新文件
+        exp_json_filename = self.exp_config.get('exp_filename', "exp_" + collectionName)
         mongoexport_cmd = "mongoexport -h"
         mongoexport_cmd += " {ip}:{port}".format(ip=conndict.get('ip'), port=conndict.get('port'))
         mongoexport_cmd += " -u {u} -p {p}".format(u=conndict.get('username'), p=conndict.get('password'))
@@ -212,20 +218,37 @@ class MongoExporter():
         mongoexport_cmd += " --type=json --query='{query}'".format(query=json.dumps(query_dict))
         if columns:
             mongoexport_cmd += " --fields={fields} ".format(fields=','.join(columns))
-        if limit:  # 如果指定了limit,就只导出limit数据
-            mongoexport_cmd += " --limit={limit} ".format(limit=limit)
-            maxLineNum = min(limit, maxLineNum)
 
-        mongoexport_cmd += " --out={out}".format(out=filename)
-        print("导出文件[{}]，数据量:{}".format(filename, maxLineNum))
-        rescode = self.__run_shell(mongoexport_cmd)
-        if rescode != 0:
-            print("mongoexport 命令执行失败！请核验 mongoexport 命令参数")
-            print(mongoexport_cmd)
-            sys.exit(-1)
+        skip_line_num: int = 0
+        while True:
+            if limit:
+                if skip_line_num >= limit:
+                    break
+                maxLineNum = limit
+                batchSize = min(maxLineNum, batchSize)
+            tmp_exp_file_linenum = exp_json_filename + str(skip_line_num)
+            if os.path.exists(tmp_exp_file_linenum):
+                os.remove(tmp_exp_file_linenum)  # 删除文件，以便输入新文件
+            mongoexport_cmd += " --skip={skip} ".format(skip=skip_line_num)
+            mongoexport_cmd += " --limit={batch} ".format(batch=batchSize)
+            skip_line_num += batchSize
+            mongoexport_cmd += " --out={out}".format(out=tmp_exp_file_linenum)
+            print("正在导出文件[{}],数据批次[{}-{}]".format(tmp_exp_file_linenum, skip_line_num, skip_line_num + batchSize))
+            rescode = self.__run_shell(mongoexport_cmd)
+            if rescode != 0:
+                print("mongoexport 命令执行失败！请核验 mongoexport 命令参数")
+                print(mongoexport_cmd)
+                sys.exit(-1)
+            if self.is_file_null(tmp_exp_file_linenum):
+                break
+            tmp_exp_filename_list.append(tmp_exp_file_linenum)
 
-        return 0
-
+        # 合并文件,删除临时文件
+        with open(exp_json_filename, 'w', encoding='utf-8') as f:
+            for file_name in tmp_exp_filename_list:
+                with open(file_name, 'r', encoding='utf-8') as file:
+                    f.write(file.read())
+                os.remove(file_name)
 
 class FileReader():
     """
@@ -367,16 +390,14 @@ class JsonNormalizer():
     def __init__(self, **kwargs):
         self.resultDataFramedict: dict = {}  # 保存处理后的数据{'tab1':df1,'tab2':df2}
         self.config = {}  # 其他配置项
-        self.config['sep'] = '_'  # 生成新字段的命名规则
-        self.config['dict_max_level'] = None  # list嵌套最大展开层数，None表示完全展开 [默认,完全展开]
-        self.config['list_max_level'] = None  # list嵌套最大展开层数，None表示完全展开 [默认,完全展开]
-        # list_max_level 是受 dict_max_level 限制的，因为先展开dict_max_level层后，再判断当前层的 list
+        self.config['sep'] = '.'  # 生成新字段的命名规则
+        self.config['dict_max_level'] = sys.maxsize  # list嵌套最大展开层数 [默认,完全展开]
+        self.config['list_max_level'] = sys.maxsize  # list嵌套最大展开层数 [默认,完全展开]
+        # 展开 dict_max_level 层后，再展开 list_max_level
         self.config['primary_keys'] = {}  # list 数据展开时，选择此表的字段作为主键
-        self.config['denest_listcolumn_list'] = []  # 指定需要展开的 list字段 ，空表示完全展开 [默认,完全展开]
-        self.config['formate_null_data'] = True  # 是否格式化空值，例如字段data，部分是dict/list，另一部分是空字符串''。[默认,格式化]
+        self.config['denest_listcolumn_list'] = []  # 指定需要展开的 list字段 ，空表示展开所有的list字段 [默认,完全展开]
         self.config['multi_table'] = True  # list是否展开成新表 or 与原表合并
         # 注意： multi_table -> False 原表合并(可能导致大量数据重复，导致内存溢出，尤其当多个list同时展开时) [默认，展开成新表]
-        self.config['del_listcolumn'] = True  # 解析完列表字段后,是否删除原表中已经解析的这一个字段的数据 [默认,删除]
         self.config.update(kwargs)
 
     def _todict(self, data):
@@ -406,16 +427,15 @@ class JsonNormalizer():
         self.config.update(config)
         # print("JsonNormalizer配置信息:", self.config)
         dict_max_level = self.config.get('dict_max_level', None)
-        sep = self.config.get('sep', '_')
+        sep = self.config.get('sep')
         tabledf = pd.json_normalize([self._todict(data) for data in jsonList], max_level=dict_max_level, sep=sep)
         table_df_dict: dict = {tableName: tabledf}  # table_df_dict 中第一张表
         # 嵌套字典类型可以直接使用pd.json_normalize展开到指定max_level。
         # 嵌套的list类型，必须单独处理，且多次处理，一次展开一层list
-        list_max_level = self.config.get('list_max_level', None)
-        list_max_level = list_max_level if list_max_level is not None else sys.maxsize
+        list_max_level = self.config.get('list_max_level')
         # 递归多层展开list
         table_df_dict = self.normalize_maxlevel_listcolumns(tableName, table_df_dict, list_max_level)
-        # 格式化结果表名，collectioin_collev1_collev2_collev3
+        # 格式化结果表名，collectioin.collev1.collev2.collev3
         tables = list(table_df_dict.keys())
         tables.remove(tableName)
         for k in tables:
@@ -438,10 +458,8 @@ class JsonNormalizer():
         :return:dict[str, pd.DataFrame]
         """
         denest_listcolumn_list = self.config.get('denest_listcolumn_list', None)
-        formate_null_data = self.config.get('formate_null_data', True)
         tabledf: pd.DataFrame = table_df_dict.get(tableName)
-        if formate_null_data:  # 如果格式化空数据
-            tabledf = self.formate_null_data(tabledf)
+        tabledf = self.formate_null_data(tabledf)  # 格式化空数据
         list_type_columns = tabledf.columns[tabledf.applymap(lambda x: isinstance(x, list)).all()].tolist()
         if denest_listcolumn_list:  # 如果指定了需要展开list的字段，取交集
             list_type_columns = [col for col in denest_listcolumn_list if col in list_type_columns]
@@ -474,13 +492,11 @@ class JsonNormalizer():
         :param list_column:
         :param new_table_column:
         :param primary_key:
-        :param del_listcolumn:
         :param listcolumn2multi_table:
         :return:
         """
-        sep = self.config.get('sep', '_')
-        multi_table = self.config.get('multi_table', True)
-        del_listcolumn = self.config.get('del_listcolumn', True)
+        sep = self.config.get('sep')
+        multi_table = self.config.get('multi_table')
         primary_keys = self.config.get('primary_keys').get(tableName, ['_id', ])
         tabledf: pd.DataFrame = table_df_Dict[tableName]
         tmp_df = tabledf[[k for k in primary_keys if k != list_column] + [list_column, ]]
@@ -492,8 +508,6 @@ class JsonNormalizer():
                                                    meta=primary_keys,
                                                    record_prefix='{}{}'.format(list_column, sep),
                                                    sep=sep)
-            if del_listcolumn:
-                del tabledf[list_column]  # 解析完列表这一列后,删除原表中数据列为列表这一列
         else:  # 如果tmp_df没有数据，不进一步解析
             tmp_list_column_df = tmp_df
         if multi_table:  # 保存list展开的新表
@@ -616,21 +630,24 @@ class TableCsvWriter():
         print("第 {} 批次数据,写入文件".format(self.batch_counter))
         if table_columnlist_dict:
             self.table_columnlist_dict.update(table_columnlist_dict)
+
         if self.batch_counter == 1:
             os.makedirs(path.rsplit('/', 1)[0], exist_ok=True)  # 如果文件路径不存在，创建
             for table, df in table_df_dict.items():
-                columns = self.table_columnlist_dict.get(table, df.columns.tolist())
-                self.table_columnlist_dict.update({table: columns})  # 存储字段
-                filename = "{}{}.txt".format(path, table)
-                print(f"[{table}]字段:", json.dumps(columns, ensure_ascii=False))
-                print(f"[{filename}]数据量:", df.shape[0])
-                self.to_csv(df, filename, mode='w', columns=columns)
+                if (not table_columnlist_dict) or (table in table_columnlist_dict.keys()):
+                    columns = self.table_columnlist_dict.get(table, df.columns.tolist())
+                    self.table_columnlist_dict.update({table: columns})  # 存储字段
+                    filename = "{}{}.txt".format(path, table)
+                    print(f"[{table}]字段:", json.dumps(columns, ensure_ascii=False))
+                    print(f"[{filename}]数据量:", df.shape[0])
+                    self.to_csv(df, filename, mode='w', columns=columns)
         else:
             for table, df in table_df_dict.items():
-                columns = self.table_columnlist_dict.get(table, df.columns.tolist())
-                filename = "{}{}.txt".format(path, table)
-                print(f"[{filename}]数据量:", df.shape[0])
-                self.to_csv(df, filename, mode='a', columns=columns)
+                if (not table_columnlist_dict) or (table in table_columnlist_dict.keys()):
+                    columns = self.table_columnlist_dict.get(table, df.columns.tolist())
+                    filename = "{}{}.txt".format(path, table)
+                    print(f"[{filename}]数据量:", df.shape[0])
+                    self.to_csv(df, filename, mode='a', columns=columns)
 
     def to_csv(self, tabledf: pd.DataFrame,
                filename: str,
@@ -642,10 +659,8 @@ class TableCsvWriter():
         self.default_to_csv_kwargs['columns'] = columns
         cols_subset = [val for val in columns if val not in tabledf.columns.tolist()]
         for col in cols_subset:  # 填充缺失列
-            print("{} 字段为空".format(col))
+            print("{} 字段为空,补充[{}]中此列".format(col,filename))
             tabledf[col] = ""
-        # print("[shape:]", tabledf.shape)
-        # print("[columns:]", tabledf.columns.tolist())
         tabledf.to_csv(filename, **self.default_to_csv_kwargs)
 
 
@@ -682,72 +697,54 @@ class TableExcelWriter():
         self.default_to_excel_kwargs['columns'] = columns
         cols_subset = [val for val in columns if val not in tabledf.columns.tolist()]
         for col in cols_subset:  # 填充缺失列
-            print("{} 字段为空".format(col))
+            print("{} 字段为空,补充[{}]中此列".format(col,filename))
             tabledf[col] = ""
         # print(self.default_to_excel_kwargs)
         tabledf.to_excel(filename, **self.default_to_excel_kwargs)
 
 
 def demo1():
-    reader = FileReader(fileName='./paperP.jl', encoding='utf-8', batch=15, limit=50)
-    tablename = 'collectionName'
-    primary_keys = {
-        tablename: ["_id"]
-    }
-    json_normalizer = JsonNormalizer(primary_keys=primary_keys, list_max_level=0, dict_max_level=0,
-                                     del_listcolumn=False)
-    washer = DataWash()
-    writer = TableExcelWriter()
+    conn = 'mongo 127.0.0.1:27017/xxx -u user -p passwd'
+    collectionName = 'collection'
+    path = '/ods/data/CCCBTMP/20230705/tmp_collection'
+    exporter = MongoExporter(conn, collectionName, path, batch=500, limit=500)
+    # exporter = ['/ods/data/CCCBTMP/20230705/tmp_collection0',]
 
-    def __my_data_wash_func(x):
-        return str(x).replace("'", '"').replace('\001', '').replace('\r', '').replace('\n', '')
+    for filename in exporter:
+        print("[done:]{}".format(filename))
+        reader = FileReader(fileName=filename, encoding='utf-8', batch=100, limit=300)
+        tablename = 'collection'
+        primary_keys = {
+            tablename: ["_id"]
+        }
+        json_normalizer = JsonNormalizer(primary_keys=primary_keys)
+        washer = DataWash()
+        writer = TableCsvWriter()
 
-    for batch_data in reader:
-        # print(len(batch_data), type(batch_data))
-        print("示例数据:", str(batch_data[0]))
-        table_df_dict = json_normalizer.normalize(tablename, batch_data)
-        for k in table_df_dict.keys():
-            table_df_dict[k] = washer.wash(table_df_dict[k], func=__my_data_wash_func)
-        writer.table_df_dict_toexcel(table_df_dict, path='./res/')
+        def __my_data_wash_func(x):
+            return str(x).replace("'", '"').replace('\001', '').replace('\r', '').replace('\n', '')
+
+        for batch_data in reader:
+            # print(len(batch_data), type(batch_data))
+            # print("示例数据:", str(batch_data[0]))
+            table_df_dict = json_normalizer.normalize(tablename, batch_data)
+            for k in table_df_dict.keys():
+                table_df_dict[k] = washer.wash(table_df_dict[k], func=__my_data_wash_func)
+            writer.table_df_dict_tocsv(table_df_dict, path='./res/')
 
 
 def demo2():
-    conn = 'mongo 127.0.0.1:27017/dbname -u username -p password'
-    collectionName = 'collectionName'
-    path = '/data/dt/'
+    conn = 'mongo 127.0.0.1:27:/dbname -u user -p pwd'
+    collectionName = 'collectionn'
+    path = '/ods/data/CCCBTMP/20221227/'
     reader = MongoReader(conn, collectionName, batch=5, limit=5)
     tablename = collectionName
     primary_keys = {
         tablename: ["_id", ]
     }
-    json_normalizer = JsonNormalizer(primary_keys=primary_keys, dict_max_level=0, list_max_level=0,
-                                     del_listcolumn=True)
+    json_normalizer = JsonNormalizer(primary_keys=primary_keys)
     washer = DataWash(old_chars=["\n", "\r", "\001"],
-                      new_chars=["/n", "/r", "//"])
-    writer = TableCsvWriter()
-
-    for batch_data in reader:
-        # print(len(batch_data), type(batch_data))
-        # print("示例数据:", str(batch_data[0]))
-        table_df_dict = json_normalizer.normalize(tablename, batch_data)
-        for k in table_df_dict.keys():
-            table_df_dict[k] = washer.wash(table_df_dict[k])
-        writer.table_df_dict_tocsv(table_df_dict, path=path)
-
-
-def demo3():
-    conn = 'mongo 127.0.0.1:27017/dbname -u username -p password'
-    collectionName = 'collectionName'
-    path = '/data/dt/'
-    reader = MongoReader(conn, collectionName, batch=5000, limit=12000)
-    tablename = collectionName
-    primary_keys = {
-        tablename: ["_id", ]
-    }
-    json_normalizer = JsonNormalizer(primary_keys=primary_keys, dict_max_level=None, list_max_level=None,
-                                     del_listcolumn=True)
-    washer = DataWash(old_chars=["\n", "\r", "\001"],
-                      new_chars=["/n", "/r", "//"])
+                      new_chars=["", "", ""])
     writer = TableCsvWriter()
 
     for batch_data in reader:
@@ -767,8 +764,6 @@ def export_with_normalize():
     parser.add_argument('--conn', type=str, required=True, help='mongo数据库连接串配置文件[必填]')
     parser.add_argument('--filepath', type=str, help='数据导出文件路径[必填]')
     parser.add_argument('--keys', type=str, default='_id', help='主键字段[可选]')
-    parser.add_argument('--dellist', type=bool, default=True,
-                        help='list展开成新表后,是否删除原表中对应字段,默认True[可选]')
     parser.add_argument('--batch', type=int, default=100000, help='一次导出数据量,默认100000[可选]')
     parser.add_argument('--dict_max', type=int, default=0,
                         help='字典嵌套最大展开层数,默认为0[可选]')
@@ -776,12 +771,13 @@ def export_with_normalize():
                         help='list嵌套最大展开层数,默认为0[可选]')
     parser.add_argument('--query', type=str, default='{}', help='数据筛选条件[可选]')
     parser.add_argument('--limit', type=int, default=0, help='数据量导出限制[可选]')
+    parser.add_argument('--sep', type=str, default='.', help='嵌套递进，标志分隔符[可选]')
     parser.add_argument('--columns', type=str, default='{}',
                         help='指定每张表的字段')
     args = parser.parse_args()
 
     COLLECTION_NAME = args.collection  # 集合名
-    CONNECT_STR_FILE = "/home/user1/conf/" + args.connstr + ".conf"  # 数据库连接串配置文件
+    CONNECT_STR_FILE = "/home/appadmin/.ods_conf/" + args.conn + ".conf"  # 数据库连接串配置文件
     FILENAME_EXPORT_PATH = args.filepath
     ID_KEYS = args.keys.split(',')  # 主键字段
     BATCH_SIZE = args.batch  # 一次导出数据量
@@ -789,27 +785,32 @@ def export_with_normalize():
     LIST_MAX = args.list_max  # LIST嵌套最大展开层数
     QUERY_DICT = json.loads(args.query, strict=False)  # mongo筛选条件
     LIMIT = args.limit
-    DELLIST = args.dellist
-    COLUMNS_DICT = json.loads(args.columns, strict=False)  # 指定每张表的字段
+    SEP = args.sep
+    COLUMNS_DICT: dict = json.loads(args.columns, strict=False)  # 指定每张表的字段
 
     print("[开始时间]:", datetime.datetime.now())
     with open(CONNECT_STR_FILE, encoding="utf-8", mode="r") as fr:
         conn = fr.read().strip()
 
-    reader_columns = COLUMNS_DICT.get(COLLECTION_NAME, None)
+    reader_columns = [i for i in COLUMNS_DICT.get(COLLECTION_NAME, [])]
+    if reader_columns:
+        list_keys = [k for k in COLUMNS_DICT.keys()]
+        list_keys.remove(COLLECTION_NAME)
+        for list_key in list_keys:
+            reader_columns.append(list_key.split(SEP)[1])
+
     reader = MongoReader(conn, COLLECTION_NAME, batch=BATCH_SIZE, limit=LIMIT, query=QUERY_DICT, columns=reader_columns)
     primary_keys = {
         COLLECTION_NAME: ID_KEYS
     }
     json_normalizer = JsonNormalizer(primary_keys=primary_keys, dict_max_level=DICT_MAX, list_max_level=LIST_MAX,
-                                     del_listcolumn=DELLIST)
+                                     sep=SEP)
     washer = DataWash(old_chars=["\n", "\r", "\001"],
-                      new_chars=["/n", "/r", "//"])
+                      new_chars=["/n", "", ""])
     writer = TableCsvWriter()
 
     for batch_data in reader:
-        # print(len(batch_data), type(batch_data))
-        # print("示例数据:", str(batch_data[0]))
+
         table_df_dict = json_normalizer.normalize(COLLECTION_NAME, batch_data)
         for k in table_df_dict.keys():
             table_df_dict[k] = washer.wash(table_df_dict[k])
@@ -825,14 +826,12 @@ def export_with_normalize():
 
 def export_then_normalize():
     parser = argparse.ArgumentParser(description="""
-    导出mongo数据到文件.[by:eli]
+    导出mongo数据到文件.[by:yinyl08]
     """)
     parser.add_argument('--collection', type=str, required=True, help='mongo集合名称[必填]')
     parser.add_argument('--conn', type=str, required=True, help='mongo数据库连接串配置文件[必填]')
     parser.add_argument('--filepath', type=str, help='数据导出文件路径[必填]')
     parser.add_argument('--keys', type=str, default='_id', help='主键字段[可选]')
-    parser.add_argument('--dellist', type=bool, default=True,
-                        help='list展开成新表后,是否删除原表中对应字段,默认True[可选]')
     parser.add_argument('--batch', type=int, default=0, help='一次解析数据量,默认0,不分批[可选]')
     parser.add_argument('--dict_max', type=int, default=0,
                         help='字典嵌套最大展开层数,默认为0[可选]')
@@ -842,10 +841,11 @@ def export_then_normalize():
     parser.add_argument('--limit', type=int, default=0, help='数据量导出限制[可选]')
     parser.add_argument('--columns', type=str, default='{}',
                         help='指定每张表的字段')
+    parser.add_argument('--sep', type=str, default='.', help='嵌套递进，标志分隔符[可选]')
     args = parser.parse_args()
 
     COLLECTION_NAME = args.collection  # 集合名
-    CONNECT_STR_FILE = "/home/user1/conf/" + args.connstr + ".conf"  # 数据库连接串配置文件
+    CONNECT_STR_FILE = "/home/appadmin/.ods_conf/" + args.conn + ".conf"  # 数据库连接串配置文件
     FILENAME_EXPORT_PATH = args.filepath
     ID_KEYS = args.keys.split(',')  # 主键字段
     BATCH = args.batch  # 一次处理数据量
@@ -853,34 +853,38 @@ def export_then_normalize():
     LIST_MAX = args.list_max  # LIST嵌套最大展开层数
     QUERY_DICT = json.loads(args.query, strict=False)  # mongo筛选条件
     LIMIT = args.limit
-    DELLIST = args.dellist
+    SEP = args.sep
     COLUMNS_DICT = json.loads(args.columns, strict=False)  # 指定每张表的字段
 
     print("[开始时间]:", datetime.datetime.now())
     with open(CONNECT_STR_FILE, encoding="utf-8", mode="r") as fr:
         conn = fr.read().strip()
 
-    exporter_columns = COLUMNS_DICT.get(COLLECTION_NAME, None)
-    export_jsonfile = FILENAME_EXPORT_PATH + COLLECTION_NAME + '.json'
+    exporter_columns: list = COLUMNS_DICT.get(COLLECTION_NAME, None)
+    if exporter_columns:
+        list_keys = [k for k in COLUMNS_DICT.keys()]
+        list_keys.remove(COLLECTION_NAME)
+        for list_key in list_keys:
+            exporter_columns.append(list_key.split(SEP)[1])
+    export_jsonfile = FILENAME_EXPORT_PATH + COLLECTION_NAME + '.json.tmp'
     exporter = MongoExporter(conn, COLLECTION_NAME,
-                             filename=export_jsonfile,
+                             exp_filename=export_jsonfile,
+                             batch=BATCH,
                              limit=LIMIT,
                              query=QUERY_DICT,
                              columns=exporter_columns)
-    exporter.export_json()
+    exporter.export_data()
     reader = FileReader(fileName=export_jsonfile, encoding='utf-8', batch=BATCH, limit=LIMIT)
     primary_keys = {
         COLLECTION_NAME: ID_KEYS
     }
     json_normalizer = JsonNormalizer(primary_keys=primary_keys, dict_max_level=DICT_MAX, list_max_level=LIST_MAX,
-                                     del_listcolumn=DELLIST)
+                                     sep=SEP)
     washer = DataWash(old_chars=["\n", "\r", "\001"],
-                      new_chars=["/n", "/r", "//"])
+                      new_chars=["/n", "", ""])
     writer = TableCsvWriter()
 
     for batch_data in reader:
-        # print(len(batch_data), type(batch_data))
-        # print("示例数据:", str(batch_data[0]))
         table_df_dict = json_normalizer.normalize(COLLECTION_NAME, batch_data)
         for k in table_df_dict.keys():
             table_df_dict[k] = washer.wash(table_df_dict[k])
@@ -890,11 +894,16 @@ def export_then_normalize():
         else:
             writer.table_df_dict_tocsv(table_df_dict, path=FILENAME_EXPORT_PATH)
 
-    os.remove(export_jsonfile)  # 删除临时文件 export_jsonfile
     print("[结束时间]:", datetime.datetime.now())
     return 0
 
 
 if __name__ == '__main__':
+    # demo1()
     # export_then_normalize()
     export_with_normalize()
+"""
+./mongo_normalize_export.py --filepath="/ods/data/CCCB/20230705/test_" --collection='collection' \
+--conn=CCCB54 --batch=50 --limit=50  --sep='_' --dict_max=3 --list_max=3 \
+--columns='{"collection":["_id", "_class", "abc"],"collection_x": ["xx","xx", "_id"]}'
+"""
