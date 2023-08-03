@@ -18,7 +18,7 @@ COOKIE_FILE = str(Path(sys.argv[0]).resolve().parent) + '/cookies.txt'
 def youget_Download(url,outDir:str='./',time_delay=60):
     """使用you-get 一个个视频下载"""
     try:
-        sys.argv = ['you-get', url.strip(), '--no-caption', '--auto-rename','-o',outDir]
+        sys.argv = ['you-get', url.strip(), '--no-caption','-o',outDir]
         if os.path.exists(COOKIE_FILE): # 如果设置了cookies.txt
             sys.argv.extend(['-c',COOKIE_FILE])
         print(sys.argv)
