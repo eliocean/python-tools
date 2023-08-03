@@ -1,7 +1,16 @@
-import subprocess
-import os
 import sys
 import you_get
+from pathlib import Path
+from time import sleep
+
+"""
+特殊参数说明：
+--playlist      下载播放列表中的所有视频
+--no-caption    不下载弹幕文件
+--auto-rename   自动重命名同名文件
+"""
+
+DELAY_TIME = 60 # 等待60s
 
 def ReadUrlsFile(fileName):
     """
@@ -19,9 +28,7 @@ def ReadUrlsFile(fileName):
 
 def DownUseYouGet(url):
     try:
-        # subprocess.getoutput("you-get " + url)
-        # os.system("you-get {} --debug -l -o {}".format(url.strip(), "./"))
-        sys.argv = ['you-get --playlist', url.strip()]
+        sys.argv = ['you-get', url.strip(), '--no-caption', '--auto-rename']
         print(sys.argv)
         you_get.main() #使用you_get.main()可以在脚本运行时显示you-get的下载情况
     except Exception as e:
@@ -34,10 +41,11 @@ def Engine(fileName):
     for url in urls:
         DownUseYouGet(url)
         print("完成第{}条记录---{}".format(urls.index(url) + 1, url))
-
+        sleep(DELAY_TIME)
+        
     print("Finished! Thanks!")
 
 
 if __name__ == '__main__':
-    fileName = "urls.txt"
+    fileName = str(Path(sys.argv[0]).resolve().parent) + "/urls.download"
     Engine(fileName)

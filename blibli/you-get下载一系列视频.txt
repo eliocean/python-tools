@@ -1,3 +1,0 @@
-(use --playlist to download all parts.)
-
-you-get mp4url --playlist
