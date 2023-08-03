@@ -15,7 +15,7 @@ logger.setLevel(20) # 20 is INFO level
 COOKIE_FILE = str(Path(sys.argv[0]).resolve().parent) + '/cookies.txt'
 
 
-def youget_Download(url,outDir:str='./',time_delay=3):
+def youget_Download(url,outDir:str='./',time_delay=30):
     """使用you-get 一个个视频下载"""
     try:
         sys.argv = ['you-get', url.strip(), '--no-caption','-o',outDir]
