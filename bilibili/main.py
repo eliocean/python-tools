@@ -12,10 +12,15 @@ from logging import getLogger
 logger = getLogger('eli_logger')
 logger.setLevel(20) # 20 is INFO level
 
+COOKIE_FILE = str(Path(sys.argv[0]).resolve().parent) + '/cookies.txt'
+
+
 def youget_Download(url,outDir:str='./',time_delay=60):
     """使用you-get 一个个视频下载"""
     try:
         sys.argv = ['you-get', url.strip(), '--no-caption', '--auto-rename','-o',outDir]
+        if os.path.exists(COOKIE_FILE): # 如果设置了cookies.txt
+            sys.argv.extend(['-c',COOKIE_FILE])
         print(sys.argv)
         you_get.main() #使用you_get.main()可以在脚本运行时显示you-get的下载情况
         logger.info(f"[{url.strip()}]-[{outDir}]")
@@ -36,12 +41,11 @@ def create_folder(folder_path):
         print(f"创建文件夹时发生错误：{str(e)}")
 
 
-def download_playlist(bvid:str='BV1AL4yxxxxx',parent:str='./'):
+def download_pagelist(bvid:str='BV1AL4yxxxxx',parent:str='./'):
     """bilibili 播放列表下载"""
     pagelist_json = requests.get(f"https://api.bilibili.com/x/player/pagelist?bvid={bvid}&jsonp=jsonp").json()
     page_list = jsonpath(pagelist_json, "$.data..page")
-    "title"
-    videoTitle = jsonpath(requests.get(f'https://api.bilibili.com/x/web-interface/view?bvid={bvid}').json(),'$..name')[0]
+    videoTitle = jsonpath(requests.get(f'https://api.bilibili.com/x/web-interface/view?bvid={bvid}').json(),'$..title')[0]
     create_folder(f"{parent}/{videoTitle}") # 每个播放视频列表，归类一个文件夹
     for page in page_list:
         down_url = f'https://www.bilibili.com/video/{bvid}?p={page}'
@@ -70,7 +74,7 @@ def download_series(series:tuple[int,int]=('1567748000', '358000'),parent:str='.
             break # 结束条件
     
     for bvid in bvid_list:
-        download_playlist(bvid=bvid,parent=f"{parent}/{videoTitle}") # 合集总结为一个文件夹
+        download_pagelist(bvid=bvid,parent=f"{parent}/{videoTitle}") # 合集总结为一个文件夹
 
 
 
@@ -95,7 +99,7 @@ def main(filename):
             if not line: # 空行
                 continue
             elif is_playlist:
-                download_playlist(is_playlist[0],download_path)
+                download_pagelist(is_playlist[0],download_path)
                 print("下载播放列表： " + line.strip())
             elif is_series:
                 download_series(is_series[0],download_path)
