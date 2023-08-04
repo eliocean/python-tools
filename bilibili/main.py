@@ -50,8 +50,8 @@ def youget_Download(url,outDir:str='./',time_delay=300):
 def create_folder(folder_path):
     """创建文件夹"""
     try:
-        os.makedirs(folder_path)
         print(f"创建文件夹 {folder_path}")
+        os.makedirs(folder_path)
     except FileExistsError:
         pass
         # print(f"文件夹 {folder_path} 已存在！")
@@ -64,7 +64,7 @@ def download_pagelist(bvid:str='BV1AL4yxxxxx',parent:str='./'):
     pagelist_json = requests.get(f"https://api.bilibili.com/x/player/pagelist?bvid={bvid}&jsonp=jsonp").json()
     page_list = jsonpath(pagelist_json, "$.data..page")
     videoTitle = jsonpath(requests.get(f'https://api.bilibili.com/x/web-interface/view?bvid={bvid}').json(),'$..title')[0]
-    videoTitle = videoTitle.strip() # 文件夹名称不能有空格
+    videoTitle = str(videoTitle).strip().replace("/"," ") # 文件夹名称不能有空格和 "/"
     create_folder(os.path.join(parent,videoTitle)) # 每个播放视频列表，归类一个文件夹
     for page in page_list:
         down_url = f'https://www.bilibili.com/video/{bvid}?p={page}'
@@ -77,7 +77,7 @@ def download_series(series:tuple[int,int]=('1567748000', '358000'),parent:str='.
     series_id = series[1] # up主合集ID
     base_url = "https://api.bilibili.com/x/series/archives?mid=1567748478&series_id=358497&only_normal=true&sort=asc&pn={}&ps=30"
     seriesTitle = jsonpath(requests.get(f'https://api.bilibili.com/x/series/series?series_id={series_id}').json(),'$..name')[0]
-    seriesTitle = seriesTitle.strip() # 文件夹名称不能有空格
+    seriesTitle = str(seriesTitle).strip().replace("/"," ") # 文件夹名称不能有空格和 "/"
     page_num = 0
     bvid_list = []
     while True:
