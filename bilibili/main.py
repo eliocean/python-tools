@@ -37,7 +37,7 @@ def youget_Download(url,outDir:str='./',time_delay=300):
             shell_argv.extend(['-c',COOKIE_FILE])
         returncode = run_shell(" ".join(shell_argv))
         if returncode == 0:
-            logger.info(f"[{datetime.datetime.now()}]-[{url.strip()}]-[{outDir}]")
+            logger.info(f"[{datetime.now()}]-[{url.strip()}]-[{outDir}]")
             break
         else:
             print("="*50)
