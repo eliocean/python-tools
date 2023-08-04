@@ -64,10 +64,10 @@ def download_pagelist(bvid:str='BV1AL4yxxxxx',parent:str='./'):
     pagelist_json = requests.get(f"https://api.bilibili.com/x/player/pagelist?bvid={bvid}&jsonp=jsonp").json()
     page_list = jsonpath(pagelist_json, "$.data..page")
     videoTitle = jsonpath(requests.get(f'https://api.bilibili.com/x/web-interface/view?bvid={bvid}').json(),'$..title')[0]
-    create_folder(f"{parent}/{videoTitle}") # 每个播放视频列表，归类一个文件夹
+    create_folder(os.path.join(parent,videoTitle)) # 每个播放视频列表，归类一个文件夹
     for page in page_list:
         down_url = f'https://www.bilibili.com/video/{bvid}?p={page}'
-        youget_Download(down_url,f"{parent}/{videoTitle}")
+        youget_Download(down_url,os.path.join(parent,videoTitle))
 
 
 def download_series(series:tuple[int,int]=('1567748000', '358000'),parent:str='./'):
@@ -92,7 +92,7 @@ def download_series(series:tuple[int,int]=('1567748000', '358000'),parent:str='.
             break # 结束条件
     
     for bvid in bvid_list:
-        download_pagelist(bvid=bvid,parent=f"{parent}/{videoTitle}") # 合集总结为一个文件夹
+        download_pagelist(bvid=bvid,parent=os.path.join(parent,videoTitle)) # 合集总结为一个文件夹
 
 
 
