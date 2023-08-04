@@ -1,42 +1,57 @@
 import re
 import sys
 import os
-import you_get
+import subprocess
 import requests
 from jsonpath import jsonpath
 from pathlib import Path
 from time import sleep
-from logging import getLogger
+from logging import getLogger,FileHandler
 
 
 logger = getLogger('eli_logger')
+logger.addHandler(FileHandler(os.path.join(str(Path(sys.argv[0]).resolve().parent),"bili_download.log")))
 logger.setLevel(20) # 20 is INFO level
 
-COOKIE_FILE = str(Path(sys.argv[0]).resolve().parent) + '/cookies.txt'
+COOKIE_FILE = os.path.join(str(Path(sys.argv[0]).resolve().parent),"cookies.txt") 
 
 
-def youget_Download(url,outDir:str='./',time_delay=30):
+
+def run_shell(shell):
+    """执行shell并随时打印输出"""
+    print("执行命令：",shell)
+    cmd = subprocess.Popen(shell, stdin=subprocess.PIPE, stderr=sys.stderr, close_fds=True,
+                           stdout=sys.stdout, universal_newlines=True, shell=True, bufsize=1)
+
+    cmd.communicate()
+    return cmd.returncode
+
+
+def youget_Download(url,outDir:str='./',time_delay=300):
     """使用you-get 一个个视频下载"""
-    try:
-        sys.argv = ['you-get', url.strip(), '--no-caption','-o',outDir]
+    while True:
+        shell_argv = ['you-get', url.strip(), '--no-caption','-o',f'"{outDir}"']
         if os.path.exists(COOKIE_FILE): # 如果设置了cookies.txt
-            sys.argv.extend(['-c',COOKIE_FILE])
-        print(sys.argv)
-        you_get.main() #使用you_get.main()可以在脚本运行时显示you-get的下载情况
-        logger.info(f"[{url.strip()}]-[{outDir}]")
-        sleep(time_delay) # 设置 time_delay ，避免网络封禁
-    except Exception as e:
-        print("下载异常，结束下载......",e)
-        exit(-1)
+            shell_argv.extend(['-c',COOKIE_FILE])
+        returncode = run_shell(" ".join(shell_argv))
+        if returncode == 0:
+            logger.info(f"[{url.strip()}]-[{outDir}]")
+            break
+        else:
+            print("="*50)
+            print(f"下载失败,{time_delay}s后重试......")
+            print("="*50)
+            sleep(time_delay)
 
 
 def create_folder(folder_path):
     """创建文件夹"""
     try:
         os.makedirs(folder_path)
-        print(f"文件夹 {folder_path} 创建成功！")
+        print(f"创建文件夹 {folder_path}")
     except FileExistsError:
-        print(f"文件夹 {folder_path} 已存在！")
+        pass
+        # print(f"文件夹 {folder_path} 已存在！")
     except Exception as e:
         print(f"创建文件夹时发生错误：{str(e)}")
 
@@ -91,7 +106,7 @@ def main(filename):
 
     if not os.path.exists(filename):
         with open(filename, 'w') as _:
-            print(f"文件 {filename} 不存在，已自动创建.")
+            print(f"文件 {filename} 不存在，已自动创建，请将url按行填入url.txt文件中")
     with open(filename,encoding="utf-8",mode="r") as fr:
         for line in fr:
             is_playlist = regex_playlist.findall(line) # 视频播放页url
@@ -109,5 +124,5 @@ def main(filename):
 
 
 if __name__ == "__main__":
-    urls_txt = str(Path(sys.argv[0]).resolve().parent) + "/url.txt"
+    urls_txt = os.path.join(str(Path(sys.argv[0]).resolve().parent),"url.txt")
     main(urls_txt)
