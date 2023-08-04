@@ -6,6 +6,7 @@ import requests
 from jsonpath import jsonpath
 from pathlib import Path
 from time import sleep
+from datetime import datetime
 from logging import getLogger,FileHandler
 
 
@@ -19,6 +20,7 @@ COOKIE_FILE = os.path.join(str(Path(sys.argv[0]).resolve().parent),"cookies.txt"
 
 def run_shell(shell):
     """执行shell并随时打印输出"""
+    print(datetime.now(),end=": ")
     print("执行命令：",shell)
     cmd = subprocess.Popen(shell, stdin=subprocess.PIPE, stderr=sys.stderr, close_fds=True,
                            stdout=sys.stdout, universal_newlines=True, shell=True, bufsize=1)
@@ -35,10 +37,11 @@ def youget_Download(url,outDir:str='./',time_delay=300):
             shell_argv.extend(['-c',COOKIE_FILE])
         returncode = run_shell(" ".join(shell_argv))
         if returncode == 0:
-            logger.info(f"[{url.strip()}]-[{outDir}]")
+            logger.info(f"[{datetime.datetime.now()}]-[{url.strip()}]-[{outDir}]")
             break
         else:
             print("="*50)
+            print(datetime.now(),end=": ")
             print(f"下载失败,{time_delay}s后重试......")
             print("="*50)
             sleep(time_delay)
@@ -115,11 +118,14 @@ def main(filename):
                 continue
             elif is_playlist:
                 download_pagelist(is_playlist[0],download_path)
+                print(datetime.now(),end=": ")
                 print("下载播放列表： " + line.strip())
             elif is_series:
                 download_series(is_series[0],download_path)
+                print(datetime.now(),end=": ")
                 print("下载up主合集： " + line.strip())
             else:
+                print(datetime.now(),end=": ")
                 print("url解析失败，暂不支持： " + line.strip())
 
 
