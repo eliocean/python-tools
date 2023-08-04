@@ -34,7 +34,7 @@ def youget_Download(url,outDir:str='./',time_delay=300):
     while True:
         shell_argv = ['you-get', url.strip(), '--no-caption','-o',f'"{outDir}"']
         if os.path.exists(COOKIE_FILE): # 如果设置了cookies.txt
-            shell_argv.extend(['-c',COOKIE_FILE])
+            shell_argv.extend(['-c',f'"{COOKIE_FILE}"'])
         returncode = run_shell(" ".join(shell_argv))
         if returncode == 0:
             logger.info(f"[{datetime.now()}]-[{url.strip()}]-[{outDir}]")
