@@ -90,7 +90,7 @@ for f_path, dir_name, f_names in os.walk(DOWNLOAD_DIR):
         try:
             with open(os.path.join(f_path,".videoInfo"), "r") as fr:
                 json_read = json.load(fr)
-            groupTitle = json_read.get("groupTitle")
+            groupTitle = json_read.get("groupTitle").replace("/"," ").strip()
             tabName = json_read.get("tabName")
             out_filename = os.path.join(DOWNLOAD_DIR,f"{groupTitle}/{tabName}.mp4")
             if os.path.exists(out_filename):
