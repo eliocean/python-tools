@@ -63,7 +63,7 @@ def download_pagelist(bvid: str = 'BV1AL4yxxxxx', parent: str = './'):
     page_list = jsonpath(pagelist_json, "$.data..page")
     videoTitle = \
         jsonpath(requests.get(f'https://api.bilibili.com/x/web-interface/view?bvid={bvid}').json(), '$..title')[0]
-    videoTitle = str(videoTitle).strip().replace("/", " ")  # 文件夹名称不能有空格和 "/"
+    videoTitle = str(videoTitle).strip().replace("/", " ").replace("|", " ")  # 文件夹名称不能有 空格 和 "/" "|"
     create_folder(os.path.join(parent, videoTitle))  # 每个播放视频列表，归类一个文件夹
     for page in page_list:
         down_url = f'https://www.bilibili.com/video/{bvid}?p={page}'
@@ -76,7 +76,7 @@ def download_series(mid_series: tuple[int, int] = ('1567748000', '358000'), pare
     seriesTitle = \
         jsonpath(requests.get(f'https://api.bilibili.com/x/series/series?series_id={mid_series[1]}').json(), '$..name')[
             0]
-    seriesTitle = str(seriesTitle).strip().replace("/", " ")  # 文件夹名称不能有空格和 "/"
+    seriesTitle = str(seriesTitle).strip().replace("/", " ").replace("|", " ")  # 文件夹名称不能有 空格 和 "/" "|"
     page_num = 0
     bvid_list = []
     while True:
@@ -99,7 +99,7 @@ def download_season(mid_season: tuple[int, int] = ('1567748000', '358000'), pare
     """bilibili up主合集下载"""
     base_url = "https://api.bilibili.com/x/polymer/web-space/seasons_archives_list?mid={mid}&season_id={season_id}&sort_reverse=false&page_num={page_num}&page_size=30"
     seasonTitle = jsonpath(requests.get(base_url.format(mid=mid_season[0], season_id=mid_season[1], page_num=1)).json(), '$..meta.name')[0]
-    seasonTitle = str(seasonTitle).strip().replace("/", " ")  # 文件夹名称不能有空格和 "/"
+    seasonTitle = str(seasonTitle).strip().replace("/", " ").replace("|", " ")  # 文件夹名称不能有 空格 和 "/" "|"
     page_num = 0
     bvid_list = []
     while True:
